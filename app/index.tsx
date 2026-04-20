@@ -1,5 +1,6 @@
 import { useRouter } from "expo-router";
 import { Text, View } from "react-native";
+import { Button, ButtonText } from "@/components/ui/button";
 
 export default function Index() {
   const router = useRouter();
@@ -12,9 +13,18 @@ export default function Index() {
         alignItems: "center",
       }}
     >
+
       <Text>Home</Text>
-      <Text onPress={() => router.push("/app/dashboard")}>Merchant Interface</Text>
-      <Text onPress={() => router.push("/web/store")}>Store</Text>
+      <Button variant="solid" size="md" action="primary" onPress={() => router.push("/app/dashboard")}>
+        <ButtonText>
+          Merchant Interface
+        </ButtonText>
+      </Button>
+      <Button variant="solid" size="md" action="primary" onPress={() => router.push("/web/store")}>
+        <ButtonText>
+          Store
+        </ButtonText>
+      </Button>
     </View>
   );
 }
