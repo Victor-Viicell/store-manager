@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Slot, useRouter, usePathname } from "expo-router";
+import { Slot, useRouter, usePathname, Redirect } from "expo-router";
 import { Pressable, ScrollView } from "react-native";
 import { HStack } from "@/components/ui/hstack";
 import { VStack } from "@/components/ui/vstack";
@@ -79,30 +79,65 @@ const MobileNavItem = ({ icon: IconComponent, label, path, onPress }: any) => {
   );
 };
 
+import { supabase } from "@/utils/supabase";
+
 export default function AppLayout() {
   const router = useRouter();
   const [showDrawer, setShowDrawer] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [session, setSession] = useState<any>(null);
+
+  React.useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setIsLoading(false);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+      setIsLoading(false);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  if (isLoading) {
+    return (
+      <Box className="flex-1 bg-white items-center justify-center">
+        <Text>Carregando...</Text>
+      </Box>
+    );
+  }
+
+  if (!session) {
+    return <Redirect href="/login" />;
+  }
 
   const NavigationContent = ({ onClose }: { onClose?: () => void }) => (
     <VStack space="xs" className="flex-1">
       <Text className="px-4 text-[10px] font-bold text-slate-400 uppercase tracking-[2px] mb-2 mt-4">
-        Visão Geral
+        Itens
+      </Text>
+      <SidebarItem icon={Package} label="Biblioteca" path="/app/items" onClose={onClose} />
+      
+      <Text className="px-4 text-[10px] font-bold text-slate-400 uppercase tracking-[2px] mt-8 mb-2">
+        Gerenciar
+      </Text>
+      <SidebarItem icon={Settings2} label="Categorias" path="/app/categories" onClose={onClose} />
+      <SidebarItem icon={BoxIcon} label="Estoque" path="/app/inventory" onClose={onClose} />
+      <SidebarItem icon={Settings2} label="Modificações" path="/app/modifiers" onClose={onClose} />
+      <SidebarItem icon={List} label="Conjuntos de opções" path="/app/options" onClose={onClose} />
+      
+      <Text className="px-4 text-[10px] font-bold text-slate-400 uppercase tracking-[2px] mt-8 mb-2">
+        Ofertas
+      </Text>
+      <SidebarItem icon={Ticket} label="Descontos" path="/app/discounts" onClose={onClose} />
+
+      <Text className="px-4 text-[10px] font-bold text-slate-400 uppercase tracking-[2px] mt-8 mb-2">
+        Sistema
       </Text>
       <SidebarItem icon={LayoutDashboard} label="Painel" path="/app/dashboard" onClose={onClose} />
       <SidebarItem icon={Users} label="Clientes" path="/app/costumers" onClose={onClose} />
-      
-      <Text className="px-4 text-[10px] font-bold text-slate-400 uppercase tracking-[2px] mt-8 mb-2">
-        Catálogo e Estoque
-      </Text>
-      <SidebarItem icon={Package} label="Itens" path="/app/items" onClose={onClose} />
-      <SidebarItem icon={BoxIcon} label="Estoque" path="/app/inventory" onClose={onClose} />
-      <SidebarItem icon={Settings2} label="Modificadores" path="/app/modifiers" onClose={onClose} />
-      <SidebarItem icon={List} label="Opções" path="/app/options" onClose={onClose} />
-      
-      <Text className="px-4 text-[10px] font-bold text-slate-400 uppercase tracking-[2px] mt-8 mb-2">
-        Crescimento
-      </Text>
-      <SidebarItem icon={Ticket} label="Descontos" path="/app/discounts" onClose={onClose} />
     </VStack>
   );
 

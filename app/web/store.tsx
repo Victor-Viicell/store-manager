@@ -1,4 +1,5 @@
 import { ScrollView, Dimensions } from "react-native";
+import { useRouter } from "expo-router";
 import { VStack } from "@/components/ui/vstack";
 import { Heading } from "@/components/ui/heading";
 import { Text } from "@/components/ui/text";
@@ -143,8 +144,31 @@ const items = [
 
 // --- Screen ---
 export default function Dashboard() {
+  const router = useRouter();
+  
   return (
     <ScrollView className="flex-1 bg-slate-50" showsVerticalScrollIndicator={false}>
+      {/* App Header for Store */}
+      <HStack className="justify-between items-center px-4 py-4 bg-white border-b border-slate-100 mb-4">
+        <HStack space="md" className="items-center">
+          <Box className="bg-primary-600 p-2 rounded-xl">
+            <ShoppingBag size={20} color="white" />
+          </Box>
+          <Heading size="md" className="text-slate-900">Loja Online</Heading>
+        </HStack>
+        <HStack space="md" className="items-center">
+          <Pressable onPress={() => router.push("/web/cart")} className="p-2 relative active:opacity-60">
+            <ShoppingBag size={24} color="#0f172a" />
+            <Badge className="absolute -top-1 -right-1 bg-primary-600 px-1.5 py-0 min-w-[20px] items-center justify-center rounded-full border-2 border-white">
+              <BadgeText className="text-[10px] text-white font-bold">0</BadgeText>
+            </Badge>
+          </Pressable>
+          <Pressable onPress={() => router.push("/login")} className="p-2 active:opacity-60">
+            <Users size={24} color="#0f172a" />
+          </Pressable>
+        </HStack>
+      </HStack>
+
       <VStack space="lg" className="pb-8">
         {/* Destaques — Carrossel */}
         <VStack space="sm">
