@@ -12,9 +12,13 @@ import {
   Pencil, 
   Plus, 
   Trash2,
-  X
+  X,
+  Image as ImageIcon,
+  Grid
 } from "lucide-react-native";
+import { EmptyState } from "@/components/empty-state";
 import { Pressable, ScrollView } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { 
   Table, 
   TableHeader, 
@@ -37,7 +41,18 @@ import {
   ModalFooter,
   ModalCloseButton
 } from "@/components/ui/modal";
+import { 
+  Actionsheet, 
+  ActionsheetBackdrop, 
+  ActionsheetContent, 
+  ActionsheetDragIndicator, 
+  ActionsheetDragIndicatorWrapper,
+  ActionsheetItem,
+  ActionsheetItemText
+} from "@/components/ui/actionsheet";
 import { Icon } from "@/components/ui/icon";
+import { Skeleton, SkeletonText } from "@/components/ui/skeleton";
+import { useRouter } from "expo-router";
 
 const categoriesData = [
   { id: "1", name: "Cerveja 600ml", itemCount: 6 },
@@ -48,27 +63,42 @@ const categoriesData = [
 import { supabase } from "@/utils/supabase";
 
 export default function Categories() {
+  const router = useRouter();
   const [categories, setCategories] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showActionsheet, setShowActionsheet] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState("");
   const [editingCategory, setEditingCategory] = useState<any>(null);
 
   useEffect(() => {
-    fetchCategories();
+    const loadCache = async () => {
+      try {
+        const cached = await AsyncStorage.getItem('@store_categories');
+        if (cached) setCategories(JSON.parse(cached));
+      } catch (e) {}
+      fetchCategories();
+    };
+    loadCache();
   }, []);
 
   const fetchCategories = async () => {
     setIsLoading(true);
-    // In a real scenario we'd also fetch itemCount, but let's just get the categories for now
+    // Fetch categories with item counts
     const { data, error } = await supabase
       .from('categories')
-      .select('*')
+      .select('*, items(count)')
       .order('created_at', { ascending: false });
       
     if (data) {
-      setCategories(data);
+      // Map data to include itemCount from the items object
+      const mapped = data.map((cat: any) => ({
+        ...cat,
+        itemCount: cat.items?.[0]?.count || 0
+      }));
+      setCategories(mapped);
+      AsyncStorage.setItem('@store_categories', JSON.stringify(mapped)).catch(() => {});
     } else if (error) {
       console.error(error);
     }
@@ -129,92 +159,119 @@ export default function Categories() {
   };
 
   return (
-    <VStack space="xl" className="flex-1">
-      {/* Header */}
-      <HStack className="justify-between items-center">
-        <Heading size="xl" className="text-slate-900 font-bold">Categorias</Heading>
-        <Button 
-          action="primary" 
-          className="rounded-xl bg-slate-950 px-6"
-          onPress={() => handleOpenModal()}
-        >
-          <ButtonText className="font-bold text-sm">Adicionar categoria</ButtonText>
-        </Button>
-      </HStack>
+    <Box className="flex-1">
+      <ScrollView className="flex-1" contentContainerStyle={{ flexGrow: 1 }}>
+        <VStack space="xl" className="flex-1 p-4 md:p-8">
+          {/* Header */}
+          <HStack className="justify-between items-center">
+            <Heading size="xl" className="text-slate-900 font-bold">Categorias</Heading>
+            <Button 
+              action="primary" 
+              className="rounded-xl bg-slate-950 px-6 hidden md:flex"
+              onPress={() => handleOpenModal()}
+            >
+              <ButtonText className="font-bold text-sm">Adicionar categoria</ButtonText>
+            </Button>
+          </HStack>
 
-      {/* Categories Table */}
-      <Box className="bg-white rounded-[24px] border border-slate-100 shadow-sm overflow-hidden mt-4">
-        <Table className="w-full">
-          <TableHeader className="bg-slate-50/50">
-            <TableRow className="border-b border-slate-100">
-              <TableHead className="px-8 py-5 flex-row items-center">
-                <ChevronDown size={16} color="#64748b" className="mr-2" />
-                <Text className="font-bold text-slate-900">Nome</Text>
-              </TableHead>
-              <TableHead className="px-8 py-5 font-bold text-slate-900 text-right">Itens</TableHead>
-              <TableHead className="px-8 py-5 font-bold text-slate-900 text-right">Ações</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
+          {/* Categories List */}
+          <VStack className="mt-4 pb-24">
             {isLoading ? (
-              <TableRow>
-                <TableData className="px-8 py-6 text-center">
-                  <Text className="text-slate-500">Carregando...</Text>
-                </TableData>
-              </TableRow>
+              Array.from({ length: 5 }).map((_, index) => (
+                <HStack key={index} space="md" className="p-4 border-b border-slate-50 items-center justify-between">
+                  <VStack space="xs">
+                    <SkeletonText _lines={1} className="w-40 h-5" />
+                    <SkeletonText _lines={1} className="w-20 h-3" />
+                  </VStack>
+                  <Skeleton className="w-6 h-6 rounded" />
+                </HStack>
+              ))
             ) : categories.length === 0 ? (
-              <TableRow>
-                <TableData className="px-8 py-6 text-center">
-                  <Text className="text-slate-500">Nenhuma categoria encontrada.</Text>
-                </TableData>
-              </TableRow>
+              <EmptyState icon={Grid} message="Nenhuma categoria encontrada." />
             ) : (
-              categories.map((category) => (
-                <TableRow key={category.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/50">
-                  <TableData className="px-8 py-6">
-                    <HStack space="md" className="items-center">
-                      <Box className="w-10 h-10 rounded-xl bg-slate-100 items-center justify-center border border-slate-100 overflow-hidden">
-                         <Text className="text-slate-500 font-bold">{category.name.charAt(0).toUpperCase()}</Text>
-                      </Box>
-                      <Text className="text-slate-900 font-semibold text-base">{category.name}</Text>
-                    </HStack>
-                  </TableData>
-                  <TableData className="px-8 py-6 text-right">
-                    <Text className="text-slate-600 font-medium">0</Text>
-                  </TableData>
-                  <TableData className="px-8 py-6 text-right">
-                    <Box className="flex-row justify-end">
-                      <Menu
-                        offset={5}
-                        placement="bottom right"
-                        trigger={({ ...triggerProps }) => {
-                          return (
-                            <Pressable {...triggerProps} className="p-2 rounded-lg hover:bg-slate-100">
-                              <MoreVertical size={20} color="#64748b" />
-                            </Pressable>
-                          );
-                        }}
-                      >
-                        <MenuItem key="edit" textValue="Editar" onPress={() => handleOpenModal(category)}>
-                          <HStack space="sm" className="items-center">
-                            <Icon as={Pencil} size="xs" color="#64748b" />
-                            <MenuItemLabel size="sm" className="text-slate-700">Editar</MenuItemLabel>
-                          </HStack>
-                        </MenuItem>
-                        <MenuItem key="delete" textValue="Excluir" className="hover:bg-red-50" onPress={() => handleDeleteCategory(category.id)}>
-                          <HStack space="sm" className="items-center">
-                            <Icon as={Trash2} size="xs" color="#ef4444" />
-                            <MenuItemLabel size="sm" className="text-red-500 font-medium">Excluir</MenuItemLabel>
-                          </HStack>
-                        </MenuItem>
-                      </Menu>
-                    </Box>
-                  </TableData>
-                </TableRow>
+              categories.map((cat) => (
+                <Box 
+                  key={cat.id} 
+                  className="p-4 border-b border-slate-50 flex-row items-center justify-between"
+                >
+                  <VStack space="xs" className="flex-1">
+                    <Text className="text-slate-900 font-semibold text-[15px]">{cat.name}</Text>
+                    <Text className="text-slate-400 text-xs font-medium">{cat.itemCount} {cat.itemCount === 1 ? 'item' : 'itens'}</Text>
+                  </VStack>
+                  <Pressable 
+                    onPress={() => {
+                      setEditingCategory(cat);
+                      setShowActionsheet(true);
+                    }} 
+                    className="p-2 rounded-lg active:bg-slate-100"
+                  >
+                    <Icon as={MoreVertical} size="sm" color="#0f172a" />
+                  </Pressable>
+                </Box>
               ))
             )}
-          </TableBody>
-        </Table>
+          </VStack>
+        </VStack>
+      </ScrollView>
+
+      {/* Category Actionsheet */}
+      <Actionsheet isOpen={showActionsheet} onClose={() => setShowActionsheet(false)}>
+        <ActionsheetBackdrop />
+        <ActionsheetContent className="pb-8">
+          <ActionsheetDragIndicatorWrapper>
+            <ActionsheetDragIndicator />
+          </ActionsheetDragIndicatorWrapper>
+          <VStack className="w-full px-4 pt-4" space="md">
+            <HStack className="justify-between items-center mb-2">
+              <Text className="font-bold text-slate-900 text-lg">Opções</Text>
+              <Pressable onPress={() => setShowActionsheet(false)} className="p-2">
+                <Icon as={X} size="md" color="#64748b" />
+              </Pressable>
+            </HStack>
+
+            <ActionsheetItem 
+              onPress={() => {
+                setShowActionsheet(false);
+                handleOpenModal(editingCategory);
+              }}
+            >
+              <Icon as={Pencil} size="sm" className="mr-3" />
+              <ActionsheetItemText className="text-slate-900 font-medium">Editar</ActionsheetItemText>
+            </ActionsheetItem>
+
+            <ActionsheetItem 
+              onPress={() => {
+                setShowActionsheet(false);
+                router.push({
+                  pathname: "/app/items/create",
+                  params: { categoryId: editingCategory.id }
+                });
+              }}
+            >
+              <Icon as={Plus} size="sm" className="mr-3" />
+              <ActionsheetItemText className="text-slate-900 font-medium">Adicionar item</ActionsheetItemText>
+            </ActionsheetItem>
+
+            <ActionsheetItem 
+              onPress={() => {
+                setShowActionsheet(false);
+                handleDeleteCategory(editingCategory.id);
+              }}
+            >
+              <Icon as={Trash2} size="sm" className="mr-3" color="#ef4444" />
+              <ActionsheetItemText className="text-red-500 font-medium">Excluir</ActionsheetItemText>
+            </ActionsheetItem>
+          </VStack>
+        </ActionsheetContent>
+      </Actionsheet>
+
+
+
+      {/* Mobile Sticky Bottom Action Bar */}
+      <Box className="md:hidden absolute bottom-4 left-0 right-0 flex-row items-center px-4 bg-transparent pointer-events-box-none z-50">
+        <Button action="primary" className="rounded-xl bg-slate-950 flex-1 h-12 shadow-sm pointer-events-auto" onPress={() => handleOpenModal()}>
+          <ButtonText className="font-bold text-sm text-white">Adicionar categoria</ButtonText>
+        </Button>
       </Box>
 
       {/* Add/Edit Category Modal */}
@@ -265,6 +322,6 @@ export default function Categories() {
           </ModalFooter>
         </ModalContent>
       </Modal>
-    </VStack>
+    </Box>
   );
 }

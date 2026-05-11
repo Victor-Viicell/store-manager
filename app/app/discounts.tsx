@@ -22,14 +22,25 @@ import {
   MenuSeparator,
 } from "@/components/ui/menu";
 import {
+  Drawer,
+  DrawerBackdrop,
+  DrawerContent,
+  DrawerHeader,
+  DrawerBody,
+} from "@/components/ui/drawer";
+import { Skeleton, SkeletonText } from "@/components/ui/skeleton";
+import {
   Plus,
   X,
   Pencil,
   Trash2,
   MoreVertical,
-  Check
+  Check,
+  Tag
 } from "lucide-react-native";
+import { EmptyState } from "@/components/empty-state";
 import { Pressable, ScrollView } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { supabase } from "@/utils/supabase";
 
 export default function Discounts() {
@@ -45,7 +56,14 @@ export default function Discounts() {
   const [discountType, setDiscountType] = useState<"percentage" | "fixed">("percentage");
 
   useEffect(() => {
-    fetchDiscounts();
+    const loadCache = async () => {
+      try {
+        const cached = await AsyncStorage.getItem('@store_discounts');
+        if (cached) setDiscounts(JSON.parse(cached));
+      } catch (e) {}
+      fetchDiscounts();
+    };
+    loadCache();
   }, []);
 
   const fetchDiscounts = async () => {
@@ -55,8 +73,12 @@ export default function Discounts() {
       .select('*')
       .order('created_at', { ascending: false });
       
-    if (data) setDiscounts(data);
-    else if (error) console.error(error);
+    if (data) {
+      setDiscounts(data);
+      AsyncStorage.setItem('@store_discounts', JSON.stringify(data)).catch(() => {});
+    } else if (error) {
+      console.error(error);
+    }
     setIsLoading(false);
   };
 
@@ -125,84 +147,7 @@ export default function Discounts() {
     }
   };
 
-  if (viewMode === "edit") {
-    const isNew = !editingDiscount;
 
-    return (
-      <VStack className="flex-1 w-full bg-slate-50/50 -m-4 md:-m-8 p-4 md:p-8">
-        <VStack space="xl" className="max-w-[1000px] w-full mx-auto pb-12">
-          
-          {/* Header */}
-          <HStack className="items-center justify-between mb-8">
-            <HStack space="md" className="items-center">
-              <Pressable onPress={closeEditView} className="p-2 rounded-full hover:bg-slate-200">
-                <Icon as={X} size="xl" color="#0f172a" />
-              </Pressable>
-              <Heading size="xl" className="text-slate-900 font-bold ml-2">
-                {isNew ? "Criar desconto" : "Editar desconto"}
-              </Heading>
-            </HStack>
-            <Button 
-              action="primary" 
-              className="rounded-xl px-6 bg-slate-950 h-11"
-              onPress={handleSave}
-            >
-              <ButtonIcon as={Check} size="sm" className="mr-2" />
-              <ButtonText className="font-bold">Salvar</ButtonText>
-            </Button>
-          </HStack>
-
-          {/* Form */}
-          <VStack space="xl">
-            <VStack space="xs">
-              <Text className="text-sm font-semibold text-slate-500">Nome do desconto</Text>
-              <Input className="rounded-xl border-slate-200 bg-white h-12">
-                <InputField 
-                  placeholder="ex.: Desconto de amigo" 
-                  value={name}
-                  onChangeText={setName}
-                />
-              </Input>
-            </VStack>
-
-            <VStack space="xs">
-              <Text className="text-sm font-semibold text-slate-500">Valor</Text>
-              <HStack space="md" className="items-center">
-                <Input className="flex-1 rounded-xl border-slate-200 bg-white h-12">
-                  <InputField 
-                    placeholder="0" 
-                    value={value}
-                    onChangeText={setValue}
-                    keyboardType="numeric"
-                  />
-                  <InputSlot className="pr-4">
-                    <Text className="text-slate-400">{discountType === "percentage" ? "%" : "R$"}</Text>
-                  </InputSlot>
-                </Input>
-                
-                {/* Segmented Control */}
-                <HStack className="bg-white border border-slate-200 rounded-xl p-1 h-12">
-                  <Pressable 
-                    onPress={() => setDiscountType("percentage")}
-                    className={`px-6 justify-center rounded-lg ${discountType === "percentage" ? "bg-slate-100 border border-slate-900" : ""}`}
-                  >
-                    <Text className={`font-bold text-sm ${discountType === "percentage" ? "text-slate-900" : "text-slate-500"}`}>Porcentagem</Text>
-                  </Pressable>
-                  <Pressable 
-                    onPress={() => setDiscountType("fixed")}
-                    className={`px-6 justify-center rounded-lg ${discountType === "fixed" ? "bg-slate-100 border border-slate-900" : ""}`}
-                  >
-                    <Text className={`font-bold text-sm ${discountType === "fixed" ? "text-slate-900" : "text-slate-500"}`}>Fixo</Text>
-                  </Pressable>
-                </HStack>
-              </HStack>
-            </VStack>
-          </VStack>
-
-        </VStack>
-      </VStack>
-    );
-  }
 
   return (
     <VStack space="xl" className="flex-1 max-w-[1200px] w-full mx-auto">
@@ -211,7 +156,7 @@ export default function Discounts() {
         <Heading size="xl" className="text-slate-900 font-bold">Descontos</Heading>
         <Button 
           action="primary" 
-          className="rounded-xl bg-slate-950 px-6 h-11"
+          className="rounded-xl bg-slate-950 px-6 h-11 hidden md:flex"
           onPress={openCreateView}
         >
           <ButtonText className="font-bold text-sm">Criar desconto</ButtonText>
@@ -223,75 +168,139 @@ export default function Discounts() {
         Crie e gerencie descontos para aplicar no checkout.
       </Text>
 
-      {/* Table */}
-      <Box className="bg-white rounded-[24px] border border-slate-100 shadow-sm overflow-hidden mt-4">
-        <Table className="w-full">
-          <TableHeader className="bg-slate-50/50">
-            <TableRow className="border-b border-slate-100">
-              <TableHead className="px-6 py-5">
-                <Text className="font-bold text-slate-900 text-sm">Nome</Text>
-              </TableHead>
-              <TableHead className="px-6 py-5">
-                <Text className="font-bold text-slate-900 text-sm">Valor</Text>
-              </TableHead>
-              <TableHead className="px-6 py-5 text-right w-20"></TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {isLoading ? (
-              <TableRow>
-                <TableData className="px-6 py-6 text-center">
-                  <Text className="text-slate-500">Carregando...</Text>
-                </TableData>
-              </TableRow>
-            ) : discounts.length === 0 ? (
-              <TableRow>
-                <TableData className="px-6 py-6 text-center">
-                  <Text className="text-slate-500">Nenhum desconto encontrado.</Text>
-                </TableData>
-              </TableRow>
-            ) : (
-              discounts.map((discount) => (
-                <TableRow key={discount.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/50">
-                  <TableData className="px-6 py-6">
-                    <Text className="text-slate-900 font-medium">{discount.name}</Text>
-                  </TableData>
-                  <TableData className="px-6 py-6">
-                    <Text className="text-slate-600">
-                      {discount.type === "fixed" ? "R$ " : ""}
-                      {discount.value}
-                      {discount.type === "percentage" ? "%" : ""}
-                    </Text>
-                  </TableData>
-                  <TableData className="px-6 py-6 text-right">
-                    <Menu
-                      offset={5}
-                      placement="bottom right"
-                      trigger={({ ...triggerProps }) => {
-                        return (
-                          <Pressable {...triggerProps} className="p-2 rounded-lg hover:bg-slate-100">
-                            <Icon as={MoreVertical} size="sm" color="#0f172a" />
-                          </Pressable>
-                        );
-                      }}
-                    >
-                      <MenuItem key="edit" textValue="Editar" onPress={() => openEditView(discount)}>
-                        <Icon as={Pencil} size="sm" className="mr-3" />
-                        <MenuItemLabel size="sm">Editar</MenuItemLabel>
-                      </MenuItem>
-                      <MenuSeparator />
-                      <MenuItem key="delete" textValue="Excluir" onPress={() => handleDelete(discount.id)}>
-                        <Icon as={Trash2} size="sm" className="mr-3" color="#ef4444" />
-                        <MenuItemLabel size="sm" className="text-red-500">Excluir</MenuItemLabel>
-                      </MenuItem>
-                    </Menu>
-                  </TableData>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
+      {/* Discounts List */}
+      <VStack className="mt-4 pb-24">
+        {isLoading ? (
+          Array.from({ length: discounts.length > 0 ? discounts.length : 1 }).map((_, index) => (
+            <VStack key={index} space="xs" className="p-4 border-b border-slate-50 justify-center">
+              <SkeletonText _lines={1} className="w-32 h-4" />
+              <SkeletonText _lines={1} className="w-16 h-3 mt-1" />
+            </VStack>
+          ))
+        ) : discounts.length === 0 ? (
+          <EmptyState icon={Tag} message="Nenhum desconto encontrado." />
+        ) : (
+          discounts.map((discount) => (
+            <Box 
+              key={discount.id} 
+              className="p-4 border-b border-slate-50 flex-row items-center justify-between"
+            >
+              <VStack space="xs" className="flex-1">
+                <Text className="text-slate-900 font-semibold">{discount.name}</Text>
+                <Text className="text-slate-500 text-sm">{discount.type === 'percentage' ? `${discount.value}%` : `R$ ${discount.value.toString().replace('.', ',')}`}</Text>
+              </VStack>
+              <Menu
+                offset={5}
+                placement="bottom right"
+                trigger={({ ...triggerProps }) => {
+                  return (
+                    <Pressable {...triggerProps} className="p-2 rounded-lg hover:bg-slate-100">
+                      <Icon as={MoreVertical} size="sm" color="#0f172a" />
+                    </Pressable>
+                  );
+                }}
+              >
+                <MenuItem key="edit" textValue="Editar" onPress={() => openEditView(discount)}>
+                  <Icon as={Pencil} size="sm" className="mr-3" />
+                  <MenuItemLabel size="sm">Editar</MenuItemLabel>
+                </MenuItem>
+                <MenuSeparator />
+                <MenuItem key="delete" textValue="Excluir" onPress={() => handleDelete(discount.id)}>
+                  <Icon as={Trash2} size="sm" className="mr-3" color="#ef4444" />
+                  <MenuItemLabel size="sm" className="text-red-500">Excluir</MenuItemLabel>
+                </MenuItem>
+              </Menu>
+            </Box>
+          ))
+        )}
+      </VStack>
+
+      {/* Mobile Sticky Bottom Action Bar */}
+      <Box className="md:hidden absolute bottom-4 left-0 right-0 flex-row items-center px-4 bg-transparent pointer-events-box-none z-50">
+        <Button action="primary" className="rounded-xl bg-slate-950 flex-1 h-12 shadow-sm pointer-events-auto" onPress={openCreateView}>
+          <ButtonText className="font-bold text-sm text-white">Criar desconto</ButtonText>
+        </Button>
       </Box>
+
+      {/* Drawer: Create/Edit Discount */}
+      <Drawer
+        isOpen={viewMode === "edit"}
+        onClose={closeEditView}
+        size="full"
+        anchor="right"
+      >
+        <DrawerBackdrop />
+        <DrawerContent className="w-full md:w-[450px] p-0 shadow-2xl">
+          <DrawerHeader className="p-6 pb-2 border-b-0 flex-row justify-between items-center">
+            <HStack space="sm" className="items-center">
+              <Pressable onPress={closeEditView} className="p-2 -ml-2 rounded-full hover:bg-slate-100">
+                <Icon as={X} size="md" color="#0f172a" />
+              </Pressable>
+              <Heading size="lg" className="text-slate-900 font-bold">
+                {!editingDiscount ? "Criar desconto" : "Editar desconto"}
+              </Heading>
+            </HStack>
+          </DrawerHeader>
+          <DrawerBody className="p-6 pt-4">
+            <VStack space="xl">
+              <VStack space="xs">
+                <Text className="text-sm text-slate-700">Nome do desconto</Text>
+                <Input className="rounded-xl border-slate-200 bg-white h-12">
+                  <InputField 
+                    placeholder="ex.: Desconto de amigo" 
+                    value={name}
+                    onChangeText={setName}
+                  />
+                </Input>
+              </VStack>
+
+              <VStack space="md">
+                <VStack space="xs">
+                  <Text className="text-sm text-slate-700">Valor</Text>
+                  <Input className="rounded-xl border-slate-200 bg-white h-12">
+                    <InputField 
+                      placeholder="0" 
+                      value={value}
+                      onChangeText={setValue}
+                      keyboardType="numeric"
+                      className="text-right"
+                    />
+                    <InputSlot className="pr-4">
+                      <Text className="text-slate-500 font-medium">{discountType === "percentage" ? "%" : "R$"}</Text>
+                    </InputSlot>
+                  </Input>
+                </VStack>
+                
+                {/* Segmented Control as separate buttons */}
+                <HStack space="md">
+                  <Pressable 
+                    onPress={() => setDiscountType("percentage")}
+                    className={`h-11 px-6 justify-center items-center rounded-xl border ${discountType === "percentage" ? "border-slate-900 bg-slate-50" : "border-slate-300 bg-white"}`}
+                  >
+                    <Text className={`font-medium ${discountType === "percentage" ? "text-slate-900" : "text-slate-700"}`}>Porcentagem</Text>
+                  </Pressable>
+                  <Pressable 
+                    onPress={() => setDiscountType("fixed")}
+                    className={`h-11 px-6 justify-center items-center rounded-xl border ${discountType === "fixed" ? "border-slate-900 bg-slate-50" : "border-slate-300 bg-white"}`}
+                  >
+                    <Text className={`font-medium ${discountType === "fixed" ? "text-slate-900" : "text-slate-700"}`}>Fixo</Text>
+                  </Pressable>
+                </HStack>
+              </VStack>
+            </VStack>
+          </DrawerBody>
+          <Box className="p-6 border-t border-slate-100 bg-white">
+            <Button 
+              action="primary" 
+              className="rounded-xl w-full bg-slate-950 h-14"
+              onPress={handleSave}
+            >
+              <ButtonIcon as={Check} size="sm" className="mr-2" color="white" />
+              <ButtonText className="font-bold text-white text-base">Salvar</ButtonText>
+            </Button>
+          </Box>
+        </DrawerContent>
+      </Drawer>
     </VStack>
   );
 }

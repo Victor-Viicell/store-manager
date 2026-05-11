@@ -1,30 +1,34 @@
-import React, { useState } from "react";
-import { Slot, useRouter, usePathname, Redirect } from "expo-router";
-import { Pressable, ScrollView } from "react-native";
-import { HStack } from "@/components/ui/hstack";
-import { VStack } from "@/components/ui/vstack";
-import { Text } from "@/components/ui/text";
 import { Box } from "@/components/ui/box";
-import { 
-  Drawer, 
-  DrawerBackdrop, 
-  DrawerContent, 
-  DrawerHeader, 
-  DrawerBody 
+import {
+  Drawer,
+  DrawerBackdrop,
+  DrawerBody,
+  DrawerContent,
+  DrawerHeader
 } from "@/components/ui/drawer";
-import { 
-  LayoutDashboard, 
-  Users, 
-  Package, 
-  Box as BoxIcon, 
-  Settings2, 
-  List, 
-  Ticket,
-  Store,
+import { HStack } from "@/components/ui/hstack";
+import { Text } from "@/components/ui/text";
+import { VStack } from "@/components/ui/vstack";
+import { Redirect, Slot, usePathname, useRouter } from "expo-router";
+import {
+  Box as BoxIcon,
   ChevronRight,
+  LayoutDashboard,
+  List,
   Menu as MenuIcon,
+  Package,
+  Settings2,
+  ShoppingBag,
+  SquareSlash,
+  Store,
+  Ticket,
+  User,
+  Users,
   X
 } from "lucide-react-native";
+import React, { useState } from "react";
+import { Pressable, ScrollView } from "react-native";
+import { ProfileDrawer } from "@/components/profile-drawer";
 
 const SidebarItem = ({ icon: IconComponent, label, path, onClose }: { icon: any, label: string, path: string, onClose?: () => void }) => {
   const router = useRouter();
@@ -32,22 +36,21 @@ const SidebarItem = ({ icon: IconComponent, label, path, onClose }: { icon: any,
   const isActive = pathname === path || (path !== "/app/dashboard" && pathname.startsWith(path));
 
   return (
-    <Pressable 
+    <Pressable
       onPress={() => {
         router.push(path as any);
         if (onClose) onClose();
       }}
-      className={`flex-row items-center px-4 py-3 rounded-xl mb-1 transition-all ${
-        isActive ? 'bg-primary-500/10' : 'active:bg-slate-100'
-      }`}
+      className={`flex-row items-center px-4 py-3 rounded-xl mb-1 transition-all ${isActive ? 'bg-primary-500/10' : 'active:bg-slate-100'
+        }`}
     >
       <Box className={`p-2 rounded-lg ${isActive ? 'bg-primary-500' : 'bg-slate-100'}`}>
-        <IconComponent 
-          size={18} 
-          color={isActive ? "white" : "#64748b"} 
+        <IconComponent
+          size={18}
+          color={isActive ? "white" : "#64748b"}
         />
       </Box>
-      <Text 
+      <Text
         className={`ml-3 flex-1 font-semibold ${isActive ? 'text-primary-700' : 'text-slate-600'}`}
       >
         {label}
@@ -63,13 +66,13 @@ const MobileNavItem = ({ icon: IconComponent, label, path, onPress }: any) => {
   const isActive = path ? (pathname === path || (path !== "/app/dashboard" && pathname.startsWith(path))) : false;
 
   return (
-    <Pressable 
+    <Pressable
       onPress={onPress || (() => router.push(path))}
       className="items-center justify-center flex-1 h-full"
     >
-      <IconComponent 
-        size={22} 
-        color={isActive ? "#0891b2" : "#94a3b8"} 
+      <IconComponent
+        size={22}
+        color={isActive ? "#0891b2" : "#94a3b8"}
         strokeWidth={isActive ? 2.5 : 2}
       />
       <Text className={`text-[10px] mt-1 font-bold ${isActive ? 'text-primary-600' : 'text-slate-400'}`}>
@@ -83,19 +86,35 @@ import { supabase } from "@/utils/supabase";
 
 export default function AppLayout() {
   const router = useRouter();
+  const pathname = usePathname();
   const [showDrawer, setShowDrawer] = useState(false);
+  const [showProfile, setShowProfile] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [session, setSession] = useState<any>(null);
+  const [isManager, setIsManager] = useState<boolean>(false);
 
   React.useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
+    const checkAuthAndRole = async (sessionData: any) => {
+      setSession(sessionData);
+      if (sessionData?.user) {
+        const { data } = await supabase
+          .from('profiles')
+          .select('is_manager')
+          .eq('id', sessionData.user.id)
+          .single();
+        
+        setIsManager(data?.is_manager || false);
+      }
       setIsLoading(false);
+    };
+
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      checkAuthAndRole(session);
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      setIsLoading(false);
+      setIsLoading(true);
+      checkAuthAndRole(session);
     });
 
     return () => subscription.unsubscribe();
@@ -113,13 +132,22 @@ export default function AppLayout() {
     return <Redirect href="/login" />;
   }
 
+  if (!isManager) {
+    return <Redirect href="/web/store" />;
+  }
+
   const NavigationContent = ({ onClose }: { onClose?: () => void }) => (
     <VStack space="xs" className="flex-1">
       <Text className="px-4 text-[10px] font-bold text-slate-400 uppercase tracking-[2px] mb-2 mt-4">
+        Vendas
+      </Text>
+      <SidebarItem icon={ShoppingBag} label="Pedidos" path="/app/orders" onClose={onClose} />
+
+      <Text className="px-4 text-[10px] font-bold text-slate-400 uppercase tracking-[2px] mb-2 mt-8">
         Itens
       </Text>
       <SidebarItem icon={Package} label="Biblioteca" path="/app/items" onClose={onClose} />
-      
+
       <Text className="px-4 text-[10px] font-bold text-slate-400 uppercase tracking-[2px] mt-8 mb-2">
         Gerenciar
       </Text>
@@ -127,7 +155,7 @@ export default function AppLayout() {
       <SidebarItem icon={BoxIcon} label="Estoque" path="/app/inventory" onClose={onClose} />
       <SidebarItem icon={Settings2} label="Modificações" path="/app/modifiers" onClose={onClose} />
       <SidebarItem icon={List} label="Conjuntos de opções" path="/app/options" onClose={onClose} />
-      
+
       <Text className="px-4 text-[10px] font-bold text-slate-400 uppercase tracking-[2px] mt-8 mb-2">
         Ofertas
       </Text>
@@ -140,6 +168,20 @@ export default function AppLayout() {
       <SidebarItem icon={Users} label="Clientes" path="/app/costumers" onClose={onClose} />
     </VStack>
   );
+
+  const getPageTitle = () => {
+    const path = pathname || "";
+    if (path.includes("/orders")) return "Pedidos";
+    if (path.includes("/items")) return "Itens";
+    if (path.includes("/dashboard")) return "Painel";
+    if (path.includes("/inventory")) return "Estoque";
+    if (path.includes("/categories")) return "Categorias";
+    if (path.includes("/modifiers")) return "Modificações";
+    if (path.includes("/options")) return "Conjuntos";
+    if (path.includes("/discounts")) return "Descontos";
+    if (path.includes("/costumers")) return "Clientes";
+    return "Store Manager";
+  };
 
   return (
     <HStack className="flex-1 bg-white">
@@ -162,11 +204,11 @@ export default function AppLayout() {
         </ScrollView>
 
         <Box className="p-6 border-t border-slate-100">
-          <Pressable 
+          <Pressable
             onPress={() => router.replace("/")}
             className="flex-row items-center justify-center px-4 py-3 rounded-xl border border-slate-200 active:bg-slate-50"
           >
-             <Text className="text-slate-600 font-bold">Sair do Modo Lojista</Text>
+            <Text className="text-slate-600 font-bold">Sair do Modo Lojista</Text>
           </Pressable>
         </Box>
       </VStack>
@@ -174,14 +216,49 @@ export default function AppLayout() {
       {/* Main Content Area - Mobile First */}
       <VStack className="flex-1 bg-slate-50/50">
         {/* Top Bar - Mobile Only */}
-        <HStack className="h-16 bg-white border-b border-slate-200 md:hidden items-center px-6">
-          <HStack space="md" className="items-center">
-            <Box className="bg-primary-600 p-1.5 rounded-lg">
-              <Store size={18} color="white" />
-            </Box>
-            <Text className="text-lg font-bold text-slate-900">Store Manager</Text>
+        <HStack className="h-14 bg-white border-b border-slate-200 md:hidden items-center justify-between px-0">
+          <HStack className="items-center h-full">
+            <Pressable onPress={() => setShowDrawer(true)} className="w-14 h-full items-center justify-center active:bg-slate-50">
+              <MenuIcon size={24} color="#0f172a" />
+            </Pressable>
+            <Box className="w-[1px] h-full bg-slate-200" />
+            <HStack space="sm" className="items-center px-4 h-full justify-center">
+              <Box className="bg-slate-900 w-6 h-6 rounded-md items-center justify-center">
+                <SquareSlash size={14} color="white" />
+              </Box>
+              <Text className="text-base font-semibold text-slate-900">{getPageTitle()}</Text>
+            </HStack>
+          </HStack>
+          <HStack className="items-center h-full">
+            <Box className="w-[1px] h-full bg-slate-200" />
+            <Pressable 
+              onPress={() => router.push("/")}
+              className="w-12 h-full items-center justify-center active:bg-slate-50"
+            >
+              <Store size={20} color="#0f172a" />
+            </Pressable>
+            <Box className="w-[1px] h-full bg-slate-200" />
+            <Pressable 
+              onPress={() => {
+                if (session?.user) {
+                  setShowProfile(true);
+                } else {
+                  router.push("/login");
+                }
+              }} 
+              className="w-12 h-full items-center justify-center active:bg-slate-50"
+            >
+              <User size={20} color="#0f172a" />
+            </Pressable>
           </HStack>
         </HStack>
+
+        <ProfileDrawer 
+          isOpen={showProfile}
+          onClose={() => setShowProfile(false)}
+          user={session?.user}
+          isManager={isManager}
+        />
 
         {/* Top Bar - Desktop Only */}
         <HStack className="h-20 bg-white border-b border-slate-200 items-center justify-between px-8 hidden md:flex">
@@ -191,25 +268,17 @@ export default function AppLayout() {
           </VStack>
           <HStack space="md" className="items-center">
             <Box className="w-10 h-10 bg-slate-100 rounded-full items-center justify-center">
-               <Users size={20} color="#64748b" />
+              <Users size={20} color="#64748b" />
             </Box>
           </HStack>
         </HStack>
 
-        {/* Page Content - Responsive Padding */}
-        <ScrollView className="flex-1" contentContainerStyle={{ flexGrow: 1 }}>
-          <Box className="flex-1 p-4 md:p-8">
-            <Slot />
-          </Box>
-        </ScrollView>
+        {/* Page Content - Each page handles its own ScrollView */}
+        <Box className="flex-1">
+          <Slot />
+        </Box>
 
-        {/* Bottom Navigation - Mobile Only */}
-        <HStack className="h-20 bg-white border-t border-slate-200 md:hidden items-center justify-around px-2 pb-4">
-          <MobileNavItem icon={LayoutDashboard} label="Painel" path="/app/dashboard" />
-          <MobileNavItem icon={BoxIcon} label="Estoque" path="/app/inventory" />
-          <MobileNavItem icon={Package} label="Itens" path="/app/items" />
-          <MobileNavItem icon={MenuIcon} label="Menu" onPress={() => setShowDrawer(true)} />
-        </HStack>
+        {/* Bottom Navigation removed as per user request */}
       </VStack>
 
       {/* Mobile Drawer Navigation */}
@@ -236,9 +305,9 @@ export default function AppLayout() {
           </DrawerHeader>
           <DrawerBody className="p-4">
             <NavigationContent onClose={() => setShowDrawer(false)} />
-            
+
             <Box className="mt-8 pt-6 border-t border-slate-100">
-              <Pressable 
+              <Pressable
                 onPress={() => {
                   setShowDrawer(false);
                   router.replace("/");

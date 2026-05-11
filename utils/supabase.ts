@@ -4,15 +4,13 @@ import { createClient } from '@supabase/supabase-js';
 import * as SecureStore from 'expo-secure-store';
 import * as aesjs from 'aes-js';
 import 'react-native-get-random-values';
+import { Platform } from 'react-native';
 
 // As Expo's SecureStore does not support values larger than 2048
 // bytes, an AES-256 key is generated and stored in SecureStore, while
 // it is used to encrypt/decrypt values stored in AsyncStorage.
 class LargeSecureStore {
-  private isAvailable = typeof window !== 'undefined' || (typeof global !== 'undefined' && (global as any).Expo);
-
   private async _encrypt(key: string, value: string) {
-    if (!this.isAvailable) return "";
     const encryptionKey = crypto.getRandomValues(new Uint8Array(256 / 8));
 
     const cipher = new aesjs.ModeOfOperation.ctr(encryptionKey, new aesjs.Counter(1));
@@ -24,7 +22,6 @@ class LargeSecureStore {
   }
 
   private async _decrypt(key: string, value: string) {
-    if (!this.isAvailable) return null;
     const encryptionKeyHex = await SecureStore.getItemAsync(key);
     if (!encryptionKeyHex) {
       return encryptionKeyHex;
@@ -37,7 +34,6 @@ class LargeSecureStore {
   }
 
   async getItem(key: string) {
-    if (!this.isAvailable) return null;
     const encrypted = await AsyncStorage.getItem(key);
     if (!encrypted) { return encrypted; }
 
@@ -45,37 +41,33 @@ class LargeSecureStore {
   }
 
   async removeItem(key: string) {
-    if (!this.isAvailable) return;
     await AsyncStorage.removeItem(key);
     await SecureStore.deleteItemAsync(key);
   }
 
   async setItem(key: string, value: string) {
-    if (!this.isAvailable) return;
     const encrypted = await this._encrypt(key, value);
 
     await AsyncStorage.setItem(key, encrypted);
   }
 }
 
-import { Platform } from 'react-native';
+// Web storage adapter using AsyncStorage (works on web via localStorage internally)
+// This follows Supabase's recommended pattern for Expo web.
+const isSSR = typeof window === 'undefined';
 
-const webStorage = {
+const ExpoWebStorageAdapter = {
   getItem: (key: string) => {
-    if (typeof window !== 'undefined') {
-      return window.localStorage.getItem(key);
-    }
-    return null;
+    if (isSSR) return null;
+    return AsyncStorage.getItem(key);
   },
   setItem: (key: string, value: string) => {
-    if (typeof window !== 'undefined') {
-      window.localStorage.setItem(key, value);
-    }
+    if (isSSR) return;
+    return AsyncStorage.setItem(key, value);
   },
   removeItem: (key: string) => {
-    if (typeof window !== 'undefined') {
-      window.localStorage.removeItem(key);
-    }
+    if (isSSR) return;
+    return AsyncStorage.removeItem(key);
   },
 };
 
@@ -84,7 +76,7 @@ const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!;
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
-    storage: Platform.OS === 'web' ? webStorage : new LargeSecureStore(),
+    storage: Platform.OS === 'web' ? ExpoWebStorageAdapter : new LargeSecureStore(),
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: false,

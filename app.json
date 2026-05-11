@@ -38,7 +38,20 @@
         }
       ],
       "expo-secure-store",
-      "expo-web-browser"
+      "expo-web-browser",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "O aplicativo precisa acessar suas fotos para adicionar imagens aos itens.",
+          "cameraPermission": "O aplicativo precisa acessar a câmera para tirar fotos dos seus itens."
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "O aplicativo precisa acessar a câmera para tirar fotos dos seus itens."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

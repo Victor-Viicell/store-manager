@@ -23,8 +23,8 @@ import {
   DrawerContent,
   DrawerHeader,
   DrawerBody,
-  DrawerCloseButton,
 } from "@/components/ui/drawer";
+import { Skeleton, SkeletonText } from "@/components/ui/skeleton";
 import {
   Search,
   Pencil,
@@ -35,9 +35,18 @@ import {
   ChevronRight,
   Check,
   Minus,
-  Trash2
+  Trash2,
+  Settings2,
+  MoreVertical
 } from "lucide-react-native";
+import { EmptyState } from "@/components/empty-state";
 import { Pressable, ScrollView } from "react-native";
+import {
+  Menu,
+  MenuItem,
+  MenuItemLabel,
+} from "@/components/ui/menu";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { supabase } from "@/utils/supabase";
 
 export default function Modifiers() {
@@ -69,7 +78,18 @@ export default function Modifiers() {
   const [currentSetModifiers, setCurrentSetModifiers] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => { fetchAll(); }, []);
+  useEffect(() => {
+    const loadCache = async () => {
+      try {
+        const cachedSets = await AsyncStorage.getItem('@store_modifier_sets');
+        if (cachedSets) setModifierSets(JSON.parse(cachedSets));
+        const cachedMods = await AsyncStorage.getItem('@store_all_modifiers');
+        if (cachedMods) setAllModifiers(JSON.parse(cachedMods));
+      } catch (e) {}
+      fetchAll();
+    };
+    loadCache();
+  }, []);
 
   const fetchAll = async () => {
     setIsLoading(true);
@@ -77,8 +97,14 @@ export default function Modifiers() {
       supabase.from('modifier_sets').select('*, modifiers(*)').order('created_at', { ascending: false }),
       supabase.from('modifiers').select('*, modifier_sets(name)').order('name'),
     ]);
-    if (setsRes.data) setModifierSets(setsRes.data);
-    if (modsRes.data) setAllModifiers(modsRes.data);
+    if (setsRes.data) {
+      setModifierSets(setsRes.data);
+      AsyncStorage.setItem('@store_modifier_sets', JSON.stringify(setsRes.data)).catch(() => {});
+    }
+    if (modsRes.data) {
+      setAllModifiers(modsRes.data);
+      AsyncStorage.setItem('@store_all_modifiers', JSON.stringify(modsRes.data)).catch(() => {});
+    }
     setIsLoading(false);
   };
 
@@ -184,6 +210,13 @@ export default function Modifiers() {
     if (isInSet) {
       // remove from set by deleting
       await supabase.from('modifiers').delete().eq('id', mod.id);
+    } else {
+      // add to set
+      await supabase.from('modifiers').insert([{ 
+        name: mod.name, 
+        price: mod.price, 
+        modifier_set_id: editingSet.id 
+      }]);
     }
     // Refresh
     const { data } = await supabase.from('modifiers').select('*').eq('modifier_set_id', editingSet.id).order('created_at');
@@ -191,296 +224,7 @@ export default function Modifiers() {
     await fetchAll();
   };
 
-  if (viewMode === "edit-set") {
-    const isNew = !editingSet;
 
-    return (
-      <VStack className="flex-1 w-full bg-slate-50/50 -m-4 md:-m-8 p-4 md:p-8">
-        <ScrollView className="flex-1">
-          <VStack space="xl" className="max-w-[1000px] w-full mx-auto pb-12">
-            
-            {/* Header */}
-            <HStack className="items-center justify-between mb-4">
-              <HStack space="md" className="items-center">
-                <Pressable onPress={closeEditSet} className="p-2 rounded-full hover:bg-slate-200 mr-2">
-                  <Icon as={X} size="xl" color="#0f172a" />
-                </Pressable>
-                <Heading size="xl" className="text-slate-900 font-bold">
-                  {isNew ? "Criar conjunto de modificações" : "Editar conjunto de modificações"}
-                </Heading>
-              </HStack>
-              <Button 
-                action="primary" 
-                className="rounded-xl px-6 bg-slate-950"
-                onPress={handleSaveSet}
-              >
-                <ButtonText className="text-white font-bold">
-                  Salvar conjunto de modificações
-                </ButtonText>
-              </Button>
-            </HStack>
-
-            {/* Set Name Input */}
-            <VStack space="xs">
-              <Text className="text-sm font-semibold text-slate-500">Nome do conjunto de modificações</Text>
-              <Input className="rounded-xl border-slate-200 bg-white h-12">
-                <InputField 
-                  placeholder="" 
-                  value={setName}
-                  onChangeText={setSetName}
-                />
-              </Input>
-            </VStack>
-
-            {/* Modifiers List Section */}
-            <VStack space="md" className="mt-4">
-              <HStack className="justify-between items-end">
-                <VStack space="xs">
-                  <Heading size="md" className="text-slate-900 font-bold">Modificações</Heading>
-                  <Text className="text-sm text-slate-500">Estas modificações serão exibidas nesta ordem no checkout:</Text>
-                </VStack>
-                <Button 
-                  variant="link" 
-                  className="p-0 h-auto"
-                  onPress={() => setIsAddModifierToSetDrawerOpen(true)}
-                >
-                  <ButtonIcon as={Plus} size="sm" className="mr-2" color="#0f172a" />
-                  <ButtonText className="font-bold text-slate-900 text-sm underline">Adicionar modificação ao conjunto</ButtonText>
-                </Button>
-              </HStack>
-
-              <Box className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
-                {currentSetModifiers.length === 0 ? (
-                  <HStack className="p-5 items-center justify-center">
-                    <Text className="text-slate-400">Nenhuma modificação adicionada.</Text>
-                  </HStack>
-                ) : (
-                  currentSetModifiers.map((mod: any, index: number) => (
-                    <HStack key={mod.id || index} className="p-5 items-center border-b border-slate-100 last:border-0 hover:bg-slate-50/50 justify-between">
-                      <HStack space="lg" className="items-center">
-                        <Icon as={GripVertical} size="md" color="#cbd5e1" />
-                        <VStack>
-                          <Text className="text-slate-900 font-medium text-base">{mod.name}</Text>
-                          <Text className="text-slate-500 text-sm">R$ {mod.price?.toString().replace('.', ',') || '0'}</Text>
-                        </VStack>
-                      </HStack>
-                      <Icon as={ChevronRight} size="sm" color="#94a3b8" />
-                    </HStack>
-                  ))
-                )}
-              </Box>
-            </VStack>
-
-            {/* Selection Rules Section */}
-            <VStack space="md" className="mt-4">
-              <VStack space="xs">
-                <Heading size="md" className="text-slate-900 font-bold">Regras de seleção</Heading>
-                <Text className="text-sm text-slate-500">Defina o número de modificações que os clientes podem escolher.</Text>
-              </VStack>
-
-              <Box className="bg-white rounded-2xl border border-slate-200 overflow-hidden mb-2">
-                <HStack className="p-6 border-b border-slate-100 items-start justify-between">
-                  <HStack>
-                    <Checkbox 
-                      value="min" 
-                      size="md" 
-                      className="mt-1 mr-4" 
-                      isChecked={minChecked}
-                      onChange={(val) => setMinChecked(val)}
-                    >
-                      <CheckboxIndicator>
-                        <CheckboxIcon as={Check} />
-                      </CheckboxIndicator>
-                    </Checkbox>
-                    <VStack>
-                      <Text className="text-slate-900 font-medium text-base">Mínimo exigido</Text>
-                      <Text className="text-slate-500 text-sm">Quantas modificações o cliente deve escolher?</Text>
-                    </VStack>
-                  </HStack>
-                  {minChecked && (
-                    <HStack space="md" className="items-center">
-                      <Pressable className="p-2" onPress={() => setMinCount(Math.max(1, minCount - 1))}>
-                        <Icon as={Minus} size="sm" color="#94a3b8" />
-                      </Pressable>
-                      <Text className="text-slate-900 font-bold w-4 text-center">{minCount}</Text>
-                      <Pressable className="p-2" onPress={() => setMinCount(minCount + 1)}>
-                        <Icon as={Plus} size="sm" color="#94a3b8" />
-                      </Pressable>
-                    </HStack>
-                  )}
-                </HStack>
-                <HStack className="p-6 items-start justify-between">
-                  <HStack>
-                    <Checkbox 
-                      value="max" 
-                      size="md" 
-                      className="mt-1 mr-4" 
-                      isChecked={maxChecked}
-                      onChange={(val) => setMaxChecked(val)}
-                    >
-                      <CheckboxIndicator>
-                        <CheckboxIcon as={Check} />
-                      </CheckboxIndicator>
-                    </Checkbox>
-                    <VStack>
-                      <Text className="text-slate-900 font-medium text-base">Máximo permitido</Text>
-                      <Text className="text-slate-500 text-sm">Quantas modificações o cliente pode escolher?</Text>
-                    </VStack>
-                  </HStack>
-                  {maxChecked && (
-                    <HStack space="md" className="items-center">
-                      <Pressable className="p-2" onPress={() => setMaxCount(Math.max(1, maxCount - 1))}>
-                        <Icon as={Minus} size="sm" color="#94a3b8" />
-                      </Pressable>
-                      <Text className="text-slate-900 font-bold w-4 text-center">{maxCount}</Text>
-                      <Pressable className="p-2" onPress={() => setMaxCount(maxCount + 1)}>
-                        <Icon as={Plus} size="sm" color="#94a3b8" />
-                      </Pressable>
-                    </HStack>
-                  )}
-                </HStack>
-              </Box>
-
-              <HStack className="justify-between items-center py-2 px-2">
-                <Text className={`${(minChecked || maxChecked) ? 'text-slate-400' : 'text-slate-600'} font-medium`}>
-                  Permitir que os clientes escolham a mesma modificação mais de uma vez
-                </Text>
-                <Switch 
-                  size="sm" 
-                  value={allowDuplicates}
-                  onValueChange={setAllowDuplicates}
-                  isDisabled={minChecked || maxChecked} 
-                />
-              </HStack>
-            </VStack>
-
-            {!isNew && (
-              <HStack space="xs" className="mt-8 items-center">
-                <Icon as={Trash2} size="sm" color="#ef4444" />
-                <Button variant="link" className="p-0" onPress={handleDeleteSet}>
-                  <ButtonText className="text-red-500 font-bold underline">Excluir conjunto de modificações</ButtonText>
-                </Button>
-              </HStack>
-            )}
-
-          </VStack>
-        </ScrollView>
-
-        {/* Drawer: Add Modifiers to Set */}
-        <Drawer
-          isOpen={isAddModifierToSetDrawerOpen}
-          onClose={() => setIsAddModifierToSetDrawerOpen(false)}
-          size="sm"
-          anchor="right"
-        >
-          <DrawerBackdrop />
-          <DrawerContent className="w-[450px] p-0 shadow-2xl">
-            <DrawerHeader className="p-6 border-b border-slate-50 flex-row justify-between items-center">
-              <Heading size="md" className="text-slate-900 font-bold">
-                Adicionar modificação ao conju...
-              </Heading>
-              <DrawerCloseButton>
-                <Icon as={X} size="md" color="#0f172a" />
-              </DrawerCloseButton>
-            </DrawerHeader>
-            <DrawerBody className="p-6">
-              <Button action="primary" className="rounded-xl bg-slate-950 h-12 mb-8 w-full" onPress={openCreateDrawer}>
-                <ButtonText className="font-bold text-base">Criar nova modificação</ButtonText>
-              </Button>
-
-              <HStack className="items-center mb-8">
-                <Box className="flex-1 h-[1px] bg-slate-200" />
-                <Text className="px-4 text-slate-400 text-xs font-bold uppercase">ou</Text>
-                <Box className="flex-1 h-[1px] bg-slate-200" />
-              </HStack>
-
-              <Text className="text-xs font-bold text-slate-700 mb-4 uppercase tracking-wider">
-                Adicionar modificações existentes
-              </Text>
-
-              <Input className="w-full rounded-xl border-slate-200 bg-white h-12 mb-4">
-                <InputSlot className="pl-3">
-                  <InputIcon as={Search} size="sm" color="#94a3b8" />
-                </InputSlot>
-                <InputField placeholder="Pesquisar" className="text-sm" />
-              </Input>
-
-              <VStack>
-                {allModifiers.filter(m => m.modifier_set_id !== editingSet?.id).length === 0 ? (
-                  <Text className="text-slate-400 text-center py-4">Nenhuma modificação existente disponível.</Text>
-                ) : (
-                  allModifiers.filter(m => m.modifier_set_id !== editingSet?.id).map((mod) => (
-                    <Pressable 
-                      key={mod.id} 
-                      className="flex-row items-center justify-between py-4 border-b border-slate-100 active:bg-slate-50"
-                    >
-                      <VStack>
-                        <Text className="text-slate-900 font-medium text-base">{mod.name}</Text>
-                        <Text className="text-slate-500 text-sm">R$ {mod.price?.toString().replace('.', ',') || '0'}</Text>
-                      </VStack>
-                    </Pressable>
-                  ))
-                )}
-              </VStack>
-            </DrawerBody>
-          </DrawerContent>
-        </Drawer>
-        
-        {/* Drawer for creating a new modifier inside the set context */}
-        <Drawer
-          isOpen={isDrawerOpen}
-          onClose={() => setIsDrawerOpen(false)}
-          size="sm"
-          anchor="right"
-        >
-          <DrawerBackdrop />
-          <DrawerContent className="w-[400px] p-0 shadow-2xl">
-            <DrawerHeader className="p-6 border-b border-slate-50 flex-row justify-between items-center">
-              <Heading size="md" className="text-slate-900 font-bold">
-                Criar uma modificação
-              </Heading>
-              <DrawerCloseButton>
-                <Icon as={X} size="md" color="#0f172a" />
-              </DrawerCloseButton>
-            </DrawerHeader>
-            <DrawerBody className="p-8">
-              <VStack space="xl">
-                <VStack space="xs">
-                  <Text className="text-sm text-slate-700">Nome da modificação</Text>
-                  <Input className="rounded-xl border-slate-200 h-12">
-                    <InputField placeholder="ex.: shoyo" value={modName} onChangeText={setModName} />
-                  </Input>
-                </VStack>
-
-                <VStack space="xs">
-                  <Text className="text-sm text-slate-700">Valor</Text>
-                  <Input className="rounded-xl border-slate-200 h-12">
-                    <InputSlot className="pl-3 pr-2">
-                      <Text className="text-slate-400">R$</Text>
-                    </InputSlot>
-                    <InputField placeholder="0" keyboardType="numeric" value={modPrice} onChangeText={setModPrice} />
-                  </Input>
-                  <Text className="text-xs text-slate-400 mt-1 leading-relaxed">
-                    Isso será adicionado ao preço do item e a mesma taxa de imposto será usada
-                  </Text>
-                </VStack>
-
-                <VStack space="md" className="mt-4">
-                  <Button 
-                    action="primary" 
-                    className="rounded-xl h-12 bg-slate-950"
-                    onPress={handleCreateModifierInSet}
-                  >
-                    <ButtonText className="text-white font-bold">Salvar</ButtonText>
-                  </Button>
-                </VStack>
-              </VStack>
-            </DrawerBody>
-          </DrawerContent>
-        </Drawer>
-      </VStack>
-    );
-  }
 
   // Main Render View
   return (
@@ -489,28 +233,32 @@ export default function Modifiers() {
       <Heading size="xl" className="text-slate-900 font-bold mb-2">Modificações</Heading>
 
       {/* Tabs */}
-      <HStack className="border-b border-slate-200">
-        <Pressable
-          onPress={() => setActiveTab("sets")}
-          className={`px-4 py-3 border-b-2 ${
-            activeTab === "sets" ? "border-slate-900" : "border-transparent"
-          }`}
-        >
-          <Text className={`font-semibold ${activeTab === "sets" ? "text-slate-900" : "text-slate-500"}`}>
-            Conjuntos de modificações
-          </Text>
-        </Pressable>
-        <Pressable
-          onPress={() => setActiveTab("all")}
-          className={`px-4 py-3 border-b-2 ${
-            activeTab === "all" ? "border-slate-900" : "border-transparent"
-          }`}
-        >
-          <Text className={`font-semibold ${activeTab === "all" ? "text-slate-900" : "text-slate-500"}`}>
-            Todas as modificações
-          </Text>
-        </Pressable>
-      </HStack>
+      <Box className="border-b border-slate-200">
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+          <HStack>
+            <Pressable
+              onPress={() => setActiveTab("sets")}
+              className={`px-4 py-3 border-b-2 ${
+                activeTab === "sets" ? "border-slate-900" : "border-transparent"
+              }`}
+            >
+              <Text className={`font-semibold whitespace-nowrap ${activeTab === "sets" ? "text-slate-900" : "text-slate-500"}`}>
+                Conjuntos
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={() => setActiveTab("all")}
+              className={`px-4 py-3 border-b-2 ${
+                activeTab === "all" ? "border-slate-900" : "border-transparent"
+              }`}
+            >
+              <Text className={`font-semibold whitespace-nowrap ${activeTab === "all" ? "text-slate-900" : "text-slate-500"}`}>
+                Todas
+              </Text>
+            </Pressable>
+          </HStack>
+        </ScrollView>
+      </Box>
 
       <ScrollView className="flex-1 mt-4">
         {activeTab === "sets" ? (
@@ -519,60 +267,37 @@ export default function Modifiers() {
               Se você vende itens com extras como recheios, coberturas ou molhos, você pode criar conjuntos de modificações e depois adicioná-los aos itens na hora do pagamento.
             </Text>
 
-            <Box className="bg-white rounded-[24px] border border-slate-100 shadow-sm overflow-hidden mt-2">
-              <Table className="w-full">
-                <TableHeader className="bg-slate-50/50">
-                  <TableRow className="border-b border-slate-100">
-                    <TableHead className="px-6 py-5">
-                      <Text className="font-bold text-slate-500 text-sm">Conjunto de modificações</Text>
-                    </TableHead>
-                    <TableHead className="px-6 py-5">
-                      <Text className="font-bold text-slate-500 text-sm">Modificações neste conjunto</Text>
-                    </TableHead>
-                    <TableHead className="px-6 py-3 text-right w-64">
-                      <Button action="primary" className="rounded-xl bg-slate-950 px-4 h-10 ml-auto" onPress={openCreateSet}>
-                        <ButtonIcon as={Plus} size="sm" className="mr-2" />
-                        <ButtonText className="font-bold text-sm">Criar conjunto de modificações</ButtonText>
-                      </Button>
-                    </TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {isLoading ? (
-                    <TableRow>
-                      <TableData className="px-6 py-6"><Text className="text-slate-500">Carregando...</Text></TableData>
-                      <TableData /><TableData />
-                    </TableRow>
-                  ) : modifierSets.length === 0 ? (
-                    <TableRow>
-                      <TableData className="px-6 py-6"><Text className="text-slate-500">Nenhum conjunto encontrado.</Text></TableData>
-                      <TableData /><TableData />
-                    </TableRow>
-                  ) : (
-                    modifierSets.map((set) => (
-                      <TableRow key={set.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/50">
-                        <TableData className="px-6 py-6">
-                          <Text className="text-slate-900 font-medium">{set.name}</Text>
-                        </TableData>
-                        <TableData className="px-6 py-6">
-                          <Text className="text-slate-600 leading-relaxed">
-                            {set.modifiers?.map((m: any) => m.name).join(" · ") || "-"}
-                          </Text>
-                        </TableData>
-                        <TableData className="px-6 py-6 text-right">
-                          <Pressable 
-                            className="p-2 rounded-lg hover:bg-slate-100 self-end ml-auto"
-                            onPress={() => openEditSet(set)}
-                          >
-                            <Icon as={Pencil} size="sm" color="#0f172a" />
-                          </Pressable>
-                        </TableData>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </Box>
+            {/* Modifier Sets List */}
+            <VStack className="mt-2 pb-24">
+              {isLoading ? (
+                Array.from({ length: modifierSets.length > 0 ? modifierSets.length : 1 }).map((_, index) => (
+                  <VStack key={index} space="xs" className="p-4 border-b border-slate-50 justify-center">
+                    <SkeletonText _lines={1} className="w-32 h-4" />
+                    <SkeletonText _lines={1} className="w-48 h-3 mt-1" />
+                  </VStack>
+                ))
+              ) : modifierSets.length === 0 ? (
+                <EmptyState icon={Settings2} message="Nenhum conjunto encontrado." />
+              ) : (
+                modifierSets.map((set) => (
+                  <Pressable 
+                    key={set.id} 
+                    className="p-4 border-b border-slate-50 flex-row items-center justify-between"
+                    onPress={() => openEditSet(set)}
+                  >
+                    <VStack space="xs" className="flex-1 pr-4">
+                      <Text className="text-slate-900 font-semibold text-lg">{set.name}</Text>
+                      <Text className="text-slate-500 text-sm leading-relaxed">
+                        {set.modifiers?.map((m: any) => m.name).join(" · ") || "-"}
+                      </Text>
+                    </VStack>
+                    <Icon as={ChevronRight} size="sm" color="#94a3b8" />
+                  </Pressable>
+                ))
+              )}
+            </VStack>
+
+
           </VStack>
         ) : (
           <VStack space="xl">
@@ -593,139 +318,365 @@ export default function Modifiers() {
                 />
               </Input>
 
-              <Button action="primary" className="rounded-xl bg-slate-950 px-6 h-11" onPress={openCreateDrawer}>
+              <Button action="primary" className="rounded-xl bg-slate-950 px-6 h-11 hidden md:flex" onPress={openCreateDrawer}>
                 <ButtonIcon as={Plus} size="sm" className="mr-2" />
                 <ButtonText className="font-bold text-sm">Criar uma modificação</ButtonText>
               </Button>
             </HStack>
 
-            <Box className="bg-white rounded-[24px] border border-slate-100 shadow-sm overflow-hidden mt-4">
-              <Table className="w-full">
-                <TableHeader className="bg-slate-50/50">
-                  <TableRow className="border-b border-slate-100">
-                    <TableHead className="px-6 py-5">
-                      <HStack space="xs" className="items-center">
-                        <ChevronDown size={14} color="#0f172a" />
-                        <Text className="font-bold text-slate-900 text-sm">Nome da modificação</Text>
-                      </HStack>
-                    </TableHead>
-                    <TableHead className="px-6 py-5">
-                      <Text className="font-bold text-slate-500 text-sm">Valor</Text>
-                    </TableHead>
-                    <TableHead className="px-6 py-5 text-right"></TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {isLoading ? (
-                    <TableRow>
-                      <TableData className="px-6 py-5"><Text className="text-slate-500">Carregando...</Text></TableData>
-                      <TableData /><TableData />
-                    </TableRow>
-                  ) : allModifiers.length === 0 ? (
-                    <TableRow>
-                      <TableData className="px-6 py-5"><Text className="text-slate-500">Nenhuma modificação encontrada.</Text></TableData>
-                      <TableData /><TableData />
-                    </TableRow>
-                  ) : (
-                    allModifiers.map((mod) => (
-                      <TableRow key={mod.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/50">
-                        <TableData className="px-6 py-5">
-                          <Text className="text-slate-900 font-medium pl-5">{mod.name}</Text>
-                        </TableData>
-                        <TableData className="px-6 py-5">
-                          <Text className="text-slate-600">R$ {mod.price?.toString().replace('.', ',') || '0'}</Text>
-                        </TableData>
-                        <TableData className="px-6 py-5 text-right">
-                          <Pressable 
-                            className="p-2 rounded-lg hover:bg-slate-100 self-end ml-auto"
-                            onPress={() => openEditDrawer(mod)}
-                          >
-                            <Icon as={Pencil} size="sm" color="#94a3b8" />
-                          </Pressable>
-                        </TableData>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </Box>
+            {/* All Modifiers List */}
+            <VStack className="mt-4 pb-24">
+              {isLoading ? (
+                Array.from({ length: allModifiers.length > 0 ? allModifiers.length : 1 }).map((_, index) => (
+                  <VStack key={index} space="xs" className="p-4 border-b border-slate-50 justify-center">
+                    <SkeletonText _lines={1} className="w-32 h-4" />
+                    <SkeletonText _lines={1} className="w-16 h-3 mt-1" />
+                  </VStack>
+                ))
+              ) : allModifiers.length === 0 ? (
+                <EmptyState icon={Settings2} message="Nenhuma modificação encontrada." />
+              ) : (
+                allModifiers.map((mod) => (
+                  <Pressable 
+                    key={mod.id} 
+                    className="p-4 border-b border-slate-50 flex-row items-center justify-between"
+                    onPress={() => openEditDrawer(mod)}
+                  >
+                    <VStack space="xs" className="flex-1">
+                      <Text className="text-slate-900 font-semibold text-lg">{mod.name}</Text>
+                      <Text className="text-slate-500 text-sm">R$ {mod.price?.toFixed(2).replace('.', ',') || '0,00'}</Text>
+                    </VStack>
+                    <Icon as={ChevronRight} size="sm" color="#94a3b8" />
+                  </Pressable>
+                ))
+              )}
+            </VStack>
+
+
           </VStack>
         )}
       </ScrollView>
 
-      {/* Modifier Drawer (Create/Edit) */}
+      {/* Drawer: Modifier Set Edit/Create */}
       <Drawer
-        isOpen={isDrawerOpen}
-        onClose={() => setIsDrawerOpen(false)}
-        size="sm"
+        isOpen={viewMode === "edit-set"}
+        onClose={closeEditSet}
+        size="full"
         anchor="right"
       >
         <DrawerBackdrop />
-        <DrawerContent className="w-[400px] p-0 shadow-2xl">
-          <DrawerHeader className="p-6 border-b border-slate-50 flex-row justify-between items-center">
-            <Heading size="md" className="text-slate-900 font-bold">
-              {editingModifier ? "Editar modificação" : "Criar uma modificação"}
+        <DrawerContent className="w-full md:w-[500px] p-0 shadow-2xl">
+          <DrawerHeader className="p-6 border-b-0 flex-row justify-between items-center">
+            <Heading size="lg" className="text-slate-900 font-bold flex-1 text-center ml-8">
+              {editingSet ? "Editar conjunto" : "Novo conjunto"}
             </Heading>
-            <DrawerCloseButton>
-              <Icon as={X} size="md" color="#0f172a" />
-            </DrawerCloseButton>
+            <Pressable onPress={closeEditSet} className="p-2">
+              <Icon as={X} size="lg" color="#0f172a" />
+            </Pressable>
           </DrawerHeader>
-          <DrawerBody className="p-8">
-            <VStack space="xl">
-              <VStack space="xs">
-                <Text className="text-sm text-slate-700">Nome da modificação</Text>
-                <Input className="rounded-xl border-slate-200 h-12">
-                  <InputField 
-                    placeholder="ex.: shoyo" 
-                    value={modName}
-                    onChangeText={setModName}
-                  />
-                </Input>
-              </VStack>
+          <DrawerBody className="p-0">
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 100 }}>
+              <VStack space="2xl" className="p-6">
+                {/* Set Name Input */}
+                <VStack space="sm">
+                  <Text className="text-base text-slate-800">Nome do conjunto</Text>
+                  <Input className="rounded-xl border-slate-200 h-14 bg-white">
+                    <InputField 
+                      placeholder="ex.: molho" 
+                      value={setName}
+                      onChangeText={setSetName}
+                    />
+                  </Input>
+                </VStack>
 
-              <VStack space="xs">
-                <Text className="text-sm text-slate-700">Valor</Text>
-                <Input className="rounded-xl border-slate-200 h-12">
-                  <InputSlot className="pl-3 pr-2">
-                    <Text className="text-slate-400">R$</Text>
-                  </InputSlot>
-                  <InputField 
-                    placeholder="0" 
-                    value={modPrice}
-                    onChangeText={setModPrice}
-                    keyboardType="numeric"
-                  />
-                </Input>
-                <Text className="text-xs text-slate-400 mt-1 leading-relaxed">
-                  Isso será adicionado ao preço do item e a mesma taxa de imposto será usada
-                </Text>
-              </VStack>
+                {/* Modifiers List Section */}
+                <VStack space="md" className="mt-2">
+                  <HStack className="justify-between items-center">
+                    <Heading size="sm" className="text-slate-900 font-bold text-xl">Modificações</Heading>
+                    <Pressable onPress={() => setIsAddModifierToSetDrawerOpen(true)}>
+                      <HStack space="xs" className="items-center">
+                        <Icon as={Plus} size="sm" color="#0f172a" />
+                        <Text className="font-bold text-slate-900 text-sm underline">Adicionar</Text>
+                      </HStack>
+                    </Pressable>
+                  </HStack>
 
-              <VStack space="md" className="mt-4">
-                <Button 
-                  action="primary" 
-                  className="rounded-xl h-12 bg-slate-950"
-                  onPress={handleSaveModifier}
-                >
-                  <ButtonText className="text-white font-bold">
-                    Salvar
-                  </ButtonText>
-                </Button>
+                  <VStack space="sm">
+                    {currentSetModifiers.length === 0 ? (
+                      <Box className="p-8 border border-dashed border-slate-200 rounded-2xl items-center">
+                        <Text className="text-slate-400 text-sm text-center">Nenhuma modificação adicionada.</Text>
+                      </Box>
+                    ) : (
+                      currentSetModifiers.map((mod: any, index: number) => (
+                        <Pressable key={mod.id || index} onPress={() => openEditDrawer(mod)}>
+                          <HStack className="p-4 bg-white rounded-2xl border border-slate-100 items-center justify-between shadow-sm">
+                            <HStack space="md" className="items-center">
+                              <Icon as={GripVertical} size="md" color="#cbd5e1" />
+                              <VStack>
+                                <Text className="text-slate-900 font-semibold text-base">{mod.name}</Text>
+                                <Text className="text-slate-500 text-sm">R$ {mod.price?.toFixed(2).replace('.', ',')}</Text>
+                              </VStack>
+                            </HStack>
+                            <Icon as={ChevronRight} size="sm" color="#94a3b8" />
+                          </HStack>
+                        </Pressable>
+                      ))
+                    )}
+                  </VStack>
+                </VStack>
 
-                {editingModifier && (
-                  <Button 
-                    variant="outline"
-                    className="rounded-xl h-12 border-slate-200"
-                    onPress={handleDeleteModifier}
-                  >
-                    <ButtonText className="text-red-500 font-bold">Excluir</ButtonText>
+                {/* Selection Rules Section */}
+                <VStack space="md" className="mt-4">
+                  <Heading size="sm" className="text-slate-900 font-bold text-xl">Regras de seleção</Heading>
+                  
+                  <Box className="bg-white rounded-2xl border border-slate-100 overflow-hidden shadow-sm">
+                    <HStack className="p-5 border-b border-slate-50 items-center justify-between">
+                      <VStack className="flex-1 pr-4">
+                        <Text className="text-slate-900 font-semibold text-base">Mínimo exigido</Text>
+                        <Text className="text-slate-500 text-xs leading-relaxed">Quantas modificações o cliente deve escolher?</Text>
+                      </VStack>
+                      <HStack space="md" className="items-center">
+                        <Checkbox 
+                          value="min" 
+                          size="md" 
+                          isChecked={minChecked}
+                          onChange={(val) => setMinChecked(val)}
+                        >
+                          <CheckboxIndicator>
+                            <CheckboxIcon as={Check} />
+                          </CheckboxIndicator>
+                        </Checkbox>
+                        {minChecked && (
+                          <HStack space="sm" className="items-center ml-2 bg-slate-50 rounded-lg p-1">
+                            <Pressable className="p-1" onPress={() => setMinCount(Math.max(1, minCount - 1))}>
+                              <Icon as={Minus} size="xs" color="#64748b" />
+                            </Pressable>
+                            <Text className="text-slate-900 font-bold w-6 text-center">{minCount}</Text>
+                            <Pressable className="p-1" onPress={() => setMinCount(minCount + 1)}>
+                              <Icon as={Plus} size="xs" color="#64748b" />
+                            </Pressable>
+                          </HStack>
+                        )}
+                      </HStack>
+                    </HStack>
+
+                    <HStack className="p-5 items-center justify-between">
+                      <VStack className="flex-1 pr-4">
+                        <Text className="text-slate-900 font-semibold text-base">Máximo permitido</Text>
+                        <Text className="text-slate-500 text-xs leading-relaxed">Quantas modificações o cliente pode escolher?</Text>
+                      </VStack>
+                      <HStack space="md" className="items-center">
+                        <Checkbox 
+                          value="max" 
+                          size="md" 
+                          isChecked={maxChecked}
+                          onChange={(val) => setMaxChecked(val)}
+                        >
+                          <CheckboxIndicator>
+                            <CheckboxIcon as={Check} />
+                          </CheckboxIndicator>
+                        </Checkbox>
+                        {maxChecked && (
+                          <HStack space="sm" className="items-center ml-2 bg-slate-50 rounded-lg p-1">
+                            <Pressable className="p-1" onPress={() => setMaxCount(Math.max(1, maxCount - 1))}>
+                              <Icon as={Minus} size="xs" color="#64748b" />
+                            </Pressable>
+                            <Text className="text-slate-900 font-bold w-6 text-center">{maxCount}</Text>
+                            <Pressable className="p-1" onPress={() => setMaxCount(maxCount + 1)}>
+                              <Icon as={Plus} size="xs" color="#64748b" />
+                            </Pressable>
+                          </HStack>
+                        )}
+                      </HStack>
+                    </HStack>
+                  </Box>
+
+                  <HStack className="justify-between items-center bg-white p-5 rounded-2xl border border-slate-100 shadow-sm mt-2">
+                    <VStack className="flex-1 pr-4">
+                      <Text className="text-slate-900 font-semibold text-base">Permitir duplicatas</Text>
+                      <Text className="text-slate-500 text-xs leading-relaxed">Clientes podem escolher a mesma modificação várias vezes</Text>
+                    </VStack>
+                    <Switch 
+                      size="sm" 
+                      value={allowDuplicates}
+                      onValueChange={setAllowDuplicates}
+                      isDisabled={minChecked || maxChecked} 
+                    />
+                  </HStack>
+                </VStack>
+
+                {/* Footer Actions */}
+                <VStack space="md" className="mt-8 mb-12">
+                  <Button action="primary" className="rounded-xl bg-slate-950 h-14 w-full" onPress={handleSaveSet}>
+                    <ButtonText className="font-bold text-white text-lg">Salvar conjunto</ButtonText>
                   </Button>
-                )}
+                  
+                  {editingSet && (
+                    <Button 
+                      variant="outline" 
+                      className="rounded-xl border-slate-300 h-14 w-full mt-2"
+                      onPress={handleDeleteSet}
+                    >
+                      <ButtonText className="text-red-500 font-bold text-base">Excluir conjunto</ButtonText>
+                    </Button>
+                  )}
+                </VStack>
               </VStack>
-            </VStack>
+            </ScrollView>
           </DrawerBody>
         </DrawerContent>
       </Drawer>
+
+      {/* Drawer: Add Modifiers to Set Selection */}
+      <Drawer
+        isOpen={isAddModifierToSetDrawerOpen}
+        onClose={() => setIsAddModifierToSetDrawerOpen(false)}
+        size="full"
+        anchor="right"
+      >
+        <DrawerBackdrop />
+        <DrawerContent className="w-full md:w-[450px] p-0 shadow-2xl">
+          <DrawerHeader className="p-6 border-b-0 flex-row justify-between items-center">
+            <Heading size="lg" className="text-slate-900 font-bold flex-1 text-center ml-8">
+              Adicionar modificação
+            </Heading>
+            <Pressable onPress={() => setIsAddModifierToSetDrawerOpen(false)} className="p-2">
+              <Icon as={X} size="lg" color="#0f172a" />
+            </Pressable>
+          </DrawerHeader>
+          <DrawerBody className="p-6">
+            <ScrollView showsVerticalScrollIndicator={false}>
+              <VStack space="xl">
+                <Button action="primary" className="rounded-xl bg-slate-950 h-14 w-full" onPress={openCreateDrawer}>
+                  <ButtonText className="font-bold text-white text-lg">Criar nova modificação</ButtonText>
+                </Button>
+
+                <HStack className="items-center py-4">
+                  <Box className="flex-1 h-[1px] bg-slate-100" />
+                  <Text className="px-4 text-slate-400 text-xs font-bold uppercase">ou use existentes</Text>
+                  <Box className="flex-1 h-[1px] bg-slate-100" />
+                </HStack>
+
+                <Input className="w-full rounded-xl border-slate-200 bg-white h-12 mb-2">
+                  <InputSlot className="pl-3">
+                    <InputIcon as={Search} size="sm" color="#94a3b8" />
+                  </InputSlot>
+                  <InputField placeholder="Pesquisar modificações..." className="text-sm" />
+                </Input>
+
+                <VStack space="sm">
+                  {allModifiers.filter(m => m.modifier_set_id !== editingSet?.id).length === 0 ? (
+                    <EmptyState icon={Settings2} message="Nenhuma modificação disponível." className="py-8" />
+                  ) : (
+                    allModifiers.filter(m => m.modifier_set_id !== editingSet?.id).map((mod) => (
+                      <Pressable 
+                        key={mod.id} 
+                        className="flex-row items-center justify-between p-4 bg-white rounded-2xl border border-slate-100 active:bg-slate-50 shadow-sm"
+                        onPress={() => toggleModifierInSet(mod)}
+                      >
+                        <VStack className="flex-1">
+                          <Text className="text-slate-900 font-semibold text-base">{mod.name}</Text>
+                          <Text className="text-slate-500 text-sm">R$ {mod.price?.toFixed(2).replace('.', ',')}</Text>
+                        </VStack>
+                        <Box className="w-6 h-6 rounded-full border border-slate-200 items-center justify-center">
+                           <Icon as={Plus} size="xs" color="#94a3b8" />
+                        </Box>
+                      </Pressable>
+                    ))
+                  )}
+                </VStack>
+              </VStack>
+            </ScrollView>
+          </DrawerBody>
+        </DrawerContent>
+      </Drawer>
+
+      {/* Drawer: Modifier Create/Edit (reuse from above) */}
+      <Drawer
+        isOpen={isDrawerOpen}
+        onClose={() => setIsDrawerOpen(false)}
+        size="full"
+        anchor="right"
+      >
+        <DrawerBackdrop />
+        <DrawerContent className="w-full md:w-[450px] p-0 shadow-2xl">
+          <DrawerHeader className="p-6 border-b-0 flex-row justify-between items-center">
+            <Heading size="lg" className="text-slate-900 font-bold flex-1 text-center ml-8">
+              {editingModifier ? "Editar modificação" : "Nova modificação"}
+            </Heading>
+            <Pressable onPress={() => setIsDrawerOpen(false)} className="p-2">
+              <Icon as={X} size="lg" color="#0f172a" />
+            </Pressable>
+          </DrawerHeader>
+          <DrawerBody className="p-6">
+            <ScrollView showsVerticalScrollIndicator={false}>
+              <VStack space="2xl">
+                <VStack space="sm">
+                  <Text className="text-base text-slate-800">Nome da modificação</Text>
+                  <Input className="rounded-xl border-slate-200 h-14 bg-white">
+                    <InputField 
+                      placeholder="ex.: shoyo" 
+                      value={modName}
+                      onChangeText={setModName}
+                    />
+                  </Input>
+                </VStack>
+
+                <VStack space="sm">
+                  <Text className="text-base text-slate-800">Valor</Text>
+                  <Input className="rounded-xl border-slate-200 h-14 bg-white">
+                    <InputSlot className="pl-4 pr-2">
+                      <Text className="text-slate-400 font-medium">R$</Text>
+                    </InputSlot>
+                    <InputField 
+                      placeholder="0" 
+                      value={modPrice}
+                      onChangeText={setModPrice}
+                      keyboardType="numeric"
+                    />
+                  </Input>
+                  <Text className="text-xs text-slate-400 mt-1 leading-relaxed">
+                    Isso será adicionado ao preço do item e a mesma taxa de imposto será usada
+                  </Text>
+                </VStack>
+
+                <VStack space="md" className="mt-8 mb-12">
+                  <Button 
+                    action="primary" 
+                    className="rounded-xl bg-slate-950 h-14 w-full"
+                    onPress={handleSaveModifier}
+                  >
+                    <ButtonText className="font-bold text-white text-lg">Salvar</ButtonText>
+                  </Button>
+
+                  {editingModifier && (
+                    <Button 
+                      variant="outline"
+                      className="rounded-xl border-slate-300 h-14 w-full mt-2"
+                      onPress={handleDeleteModifier}
+                    >
+                      <ButtonText className="text-red-500 font-bold text-base">Excluir modificação</ButtonText>
+                    </Button>
+                  )}
+                </VStack>
+              </VStack>
+            </ScrollView>
+          </DrawerBody>
+        </DrawerContent>
+      </Drawer>
+
+      {/* Mobile Sticky Bottom Action Bar */}
+      <Box className="md:hidden absolute bottom-4 left-0 right-0 flex-row items-center px-4 bg-transparent pointer-events-box-none z-50">
+        {activeTab === "sets" ? (
+          <Button action="primary" className="rounded-xl bg-slate-950 flex-1 h-12 shadow-sm pointer-events-auto" onPress={openCreateSet}>
+            <ButtonText className="font-bold text-sm text-white">Criar conjunto de modificações</ButtonText>
+          </Button>
+        ) : (
+          <Button action="primary" className="rounded-xl bg-slate-950 flex-1 h-12 shadow-sm pointer-events-auto" onPress={openCreateDrawer}>
+            <ButtonText className="font-bold text-sm text-white">Criar uma modificação</ButtonText>
+          </Button>
+        )}
+      </Box>
     </VStack>
   );
 }
